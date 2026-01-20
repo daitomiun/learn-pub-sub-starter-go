@@ -25,6 +25,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("Invalid connection! -> %v \n", err)
 	}
+	ch, err := conn.Channel()
+	if err != nil {
+		log.Fatalf("Could not create channel! Err: %v \n", err)
+	}
 	defer conn.Close()
 	log.Printf("Succesfull connection!")
 
@@ -38,7 +42,19 @@ func main() {
 		pubsub.HandlerPause(gameState),
 	)
 	if err != nil {
-		log.Fatalf("Could not subscibe! -> %v \n", err)
+		log.Fatalf("Could not subscibe to exchange! -> %v \n", err)
+	}
+
+	err = pubsub.SubscribeJSON(
+		conn,
+		routing.ExchangePerilTopic,
+		routing.ArmyMovesPrefix+"."+usr,
+		routing.ArmyMovesPrefix+".*",
+		pubsub.Transient,
+		pubsub.HandlerMove(gameState),
+	)
+	if err != nil {
+		log.Fatalf("Could not bind to army moves exchange! -> %v \n", err)
 	}
 	for true {
 		words := gamelogic.GetInput()
@@ -60,7 +76,17 @@ func main() {
 				fmt.Printf("Could not move -> %v \n", err)
 				continue
 			}
-			fmt.Printf("Pieces moved: %v \n", move.Player.Units)
+			err = pubsub.PublishJSON(
+				ch,
+				routing.ExchangePerilTopic,
+				routing.ArmyMovesPrefix+"."+move.Player.Username,
+				move,
+			)
+			if err != nil {
+				fmt.Printf("Could not publish the move -> %v \n", err)
+				continue
+			}
+			fmt.Printf("Pieces moved by %s: %v \n", move.Player.Username, move.Player.Units)
 			continue
 		case "status":
 			gameState.CommandStatus()
