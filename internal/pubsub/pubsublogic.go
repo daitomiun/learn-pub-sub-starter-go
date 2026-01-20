@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 
+	"github.com/bootdotdev/learn-pub-sub-starter/internal/gamelogic"
+	"github.com/bootdotdev/learn-pub-sub-starter/internal/routing"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -32,7 +35,7 @@ func PublishJSON[T any](ch *amqp.Channel, exchange, key string, val T) error {
 	return nil
 }
 
-type SimpleQueueType int
+type SimpleQueueType int // an enum to represent "durable" or "transient"
 
 const (
 	Durable = iota
@@ -44,7 +47,7 @@ func DeclareAndBind(
 	exchange,
 	queueName,
 	key string,
-	queueType SimpleQueueType, // an enum to represent "durable" or "transient"
+	queueType SimpleQueueType,
 ) (*amqp.Channel, amqp.Queue, error) {
 	ch, err := conn.Channel()
 	if err != nil {
@@ -73,4 +76,56 @@ func DeclareAndBind(
 		return nil, amqp.Queue{}, err
 	}
 	return ch, queue, nil
+}
+
+func SubscribeJSON[T any](
+	conn *amqp.Connection,
+	exchange,
+	queueName,
+	key string,
+	queueType SimpleQueueType,
+	handler func(T),
+) error {
+	ch, queue, err := DeclareAndBind(
+		conn,
+		exchange,
+		queueName,
+		key,
+		queueType,
+	)
+	if err != nil {
+		return err
+	}
+	chDelivery, err := ch.Consume(
+		queue.Name,
+		"",
+		false,
+		false,
+		false,
+		false,
+		amqp.Table{},
+	)
+	if err != nil {
+		return err
+	}
+
+	go func() {
+		for item := range chDelivery {
+			var message T
+			if err := json.Unmarshal(item.Body, &message); err != nil {
+				continue
+			}
+			handler(message)
+			item.Ack(false)
+		}
+	}()
+
+	return nil
+}
+
+func HandlerPause(gs *gamelogic.GameState) func(routing.PlayingState) {
+	return func(ps routing.PlayingState) {
+		defer fmt.Print("> ")
+		gs.HandlePause(ps)
+	}
 }

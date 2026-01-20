@@ -23,18 +23,23 @@ func main() {
 	fmt.Println("Starting Peril client...")
 	conn, err := amqp.Dial(connStr)
 	if err != nil {
-		log.Fatalf("Invalid connection! Err: %v \n", err)
+		log.Fatalf("Invalid connection! -> %v \n", err)
 	}
 	defer conn.Close()
 	log.Printf("Succesfull connection!")
-	_, _, err = pubsub.DeclareAndBind(
+
+	gameState := gamelogic.NewGameState(usr)
+	err = pubsub.SubscribeJSON(
 		conn,
 		routing.ExchangePerilDirect,
 		routing.PauseKey+"."+usr,
 		routing.PauseKey,
 		pubsub.Transient,
+		pubsub.HandlerPause(gameState),
 	)
-	gameState := gamelogic.NewGameState(usr)
+	if err != nil {
+		log.Fatalf("Could not subscibe! -> %v \n", err)
+	}
 	for true {
 		words := gamelogic.GetInput()
 		if len(words) == 0 {
