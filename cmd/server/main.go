@@ -24,12 +24,13 @@ func main() {
 	if err != nil {
 		log.Fatalf("Could not create channel! Err: %v \n", err)
 	}
-	_, _, err = pubsub.DeclareAndBind(
+	err = pubsub.SubscribeGob(
 		conn,
 		routing.ExchangePerilTopic,
 		routing.GameLogSlug,
 		routing.GameLogSlug+".*",
 		pubsub.Durable,
+		pubsub.HandlerLogs(),
 	)
 	if err != nil {
 		log.Fatalf("Could not bind! -> %v \n", err)

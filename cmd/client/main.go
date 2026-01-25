@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
 
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/gamelogic"
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/pubsub"
@@ -51,11 +52,24 @@ func main() {
 		routing.ArmyMovesPrefix+"."+usr,
 		routing.ArmyMovesPrefix+".*",
 		pubsub.Transient,
-		pubsub.HandlerMove(gameState),
+		pubsub.HandlerMove(gameState, ch),
 	)
 	if err != nil {
 		log.Fatalf("Could not bind to army moves exchange! -> %v \n", err)
 	}
+
+	err = pubsub.SubscribeJSON(
+		conn,
+		routing.ExchangePerilTopic,
+		"war",
+		routing.WarRecognitionsPrefix+".*",
+		pubsub.Durable,
+		pubsub.HandlerWar(gameState, ch),
+	)
+	if err != nil {
+		log.Fatalf("Could not bind to army exchange! -> %v \n", err)
+	}
+
 	for true {
 		words := gamelogic.GetInput()
 		if len(words) == 0 {
@@ -98,7 +112,25 @@ func main() {
 			gamelogic.PrintQuit()
 			return
 		case "spam":
-			fmt.Println("Spamming not allowed yet!")
+			if len(words) <= 1 {
+				fmt.Println("Need another argument ie: spam 100")
+				continue
+			}
+			times, err := strconv.Atoi(words[1])
+			if err != nil {
+				fmt.Printf("Invalid Number -> %v \n", err)
+				continue
+			}
+			for range times {
+				err := pubsub.PublishGameLog(ch,
+					gameState.GetUsername(),
+					gamelogic.GetMaliciousLog(),
+				)
+				if err != nil {
+					fmt.Printf("Could not publish spam log -> %v \n", err)
+					continue
+				}
+			}
 			continue
 		default:
 			fmt.Println("That's not an actual command")
